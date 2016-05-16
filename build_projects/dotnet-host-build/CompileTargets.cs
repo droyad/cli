@@ -17,6 +17,8 @@ namespace Microsoft.DotNet.Host.Build
     public class CompileTargets
     {
         public static readonly bool IsWinx86 = CurrentPlatform.IsWindows && CurrentArchitecture.Isx86;
+        public const string SharedFrameworkName = "Microsoft.NETCore.App";
+
 
         public static string HostPackagePlatformRid => HostPackageSupportedRids[
                              (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
@@ -38,13 +40,12 @@ namespace Microsoft.DotNet.Host.Build
         };
 
 
-        private static string DotnetHostBaseName => $"dotnet{Constants.ExeSuffix}";
-        private static string DotnetHostFxrBaseName => $"{Constants.DynamicLibPrefix}hostfxr{Constants.DynamicLibSuffix}";
-        private static string HostPolicyBaseName => $"{Constants.DynamicLibPrefix}hostpolicy{Constants.DynamicLibSuffix}";
+        
 
         [Target(nameof(PrepareTargets.Init), 
             nameof(CompileCoreHost), 
-            nameof(PackagePkgProjects))]
+            nameof(PackagePkgProjects),
+            nameof(PublishSharedFramework))]
         public static BuildTargetResult Compile(BuildTargetContext c)
         {
             return c.Success();
@@ -160,8 +161,8 @@ namespace Microsoft.DotNet.Host.Build
 
                 // Copy the output out
                 File.Copy(Path.Combine(cmakeOut, "cli", "dotnet"), Path.Combine(Dirs.CorehostLatest, "dotnet"), overwrite: true);
-                File.Copy(Path.Combine(cmakeOut, "cli", "dll", HostPolicyBaseName), Path.Combine(Dirs.CorehostLatest, HostPolicyBaseName), overwrite: true);
-                File.Copy(Path.Combine(cmakeOut, "cli", "fxr", DotnetHostFxrBaseName), Path.Combine(Dirs.CorehostLatest, DotnetHostFxrBaseName), overwrite: true);
+                File.Copy(Path.Combine(cmakeOut, "cli", "dll", HostArtifactNames.HostPolicyBaseName), Path.Combine(Dirs.CorehostLatest, HostArtifactNames.HostPolicyBaseName), overwrite: true);
+                File.Copy(Path.Combine(cmakeOut, "cli", "fxr", HostArtifactNames.DotnetHostFxrBaseName), Path.Combine(Dirs.CorehostLatest, HostArtifactNames.DotnetHostFxrBaseName), overwrite: true);
             }
             return c.Success();
         }
@@ -226,6 +227,26 @@ namespace Microsoft.DotNet.Host.Build
                     throw new BuildFailureException($"Nupkg for {fileFilter} was not created.");
                 }
             }
+            return c.Success();
+        }
+
+        [Target]
+        public static BuildTargetResult PublishSharedFramework(BuildTargetContext c)
+        {
+            var outputDir = Dirs.CorehostBuildSharedFrameworkPublishDir;
+            var dotnetCli = DotNetCli.Stage0;
+            var sharedFrameworkNugetVersion = c.BuildContext.Get<string>("SharedFrameworkNugetVersion");
+            var commitHash = c.BuildContext.Get<string>("CommitHash");
+
+            var sharedFrameworkPublisher = new SharedFrameworkPublisher(
+                Dirs.RepoRoot,
+                Dirs.CorehostLocked,
+                Dirs.CorehostLatest,
+                Dirs.CorehostLocalPackages,
+                sharedFrameworkNugetVersion);
+
+            sharedFrameworkPublisher.PublishSharedFramework(outputDir, commitHash, dotnetCli);
+
             return c.Success();
         }
     }

@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using Microsoft.DotNet.Cli.Build;
 using System.Runtime.InteropServices;
 using Microsoft.DotNet.Cli.Build.Framework;
 using Microsoft.DotNet.InternalAbstractions;
 
 using static Microsoft.DotNet.Cli.Build.Framework.BuildHelpers;
 
-namespace Microsoft.DotNet.Cli.Build
+namespace Microsoft.DotNet.Host.Build
 {
     public class MsiTargets
     {
@@ -25,17 +26,13 @@ namespace Microsoft.DotNet.Cli.Build
             }
         }
 
-        private static string SdkMsi { get; set; }
-
-        private static string SdkBundle { get; set; }
-
         private static string SharedHostMsi { get; set; }
 
         private static string SharedFrameworkMsi { get; set; }
 
         private static string SharedFrameworkBundle { get; set; }
 
-        private static string SdkEngine { get; set; }
+        private static string SharedFrameworkEngine { get; set; }
 
         private static string MsiVersion { get; set; }
 
@@ -79,13 +76,11 @@ namespace Microsoft.DotNet.Cli.Build
         [BuildPlatforms(BuildPlatform.Windows)]
         public static BuildTargetResult InitMsi(BuildTargetContext c)
         {
-            SdkBundle = c.BuildContext.Get<string>("CombinedFrameworkSDKHostInstallerFile");
-            SdkMsi = Path.ChangeExtension(SdkBundle, "msi");
-            SdkEngine = GetEngineName(SdkBundle);
 
             SharedFrameworkBundle = c.BuildContext.Get<string>("CombinedFrameworkHostInstallerFile");
             SharedHostMsi = Path.ChangeExtension(c.BuildContext.Get<string>("SharedHostInstallerFile"), "msi");
             SharedFrameworkMsi = Path.ChangeExtension(c.BuildContext.Get<string>("SharedFrameworkInstallerFile"), "msi");
+            SharedFrameworkEngine = GetEngineName(SharedFrameworkBundle);
 
             var buildVersion = c.BuildContext.Get<BuildVersion>("BuildVersion");
             MsiVersion = buildVersion.GenerateMsiVersion();
@@ -97,7 +92,8 @@ namespace Microsoft.DotNet.Cli.Build
         }
 
         [Target(nameof(MsiTargets.InitMsi),
-        nameof(GenerateCliSdkMsi))]
+        nameof(GenerateDotnetSharedHostMsi),
+        nameof(GenerateDotnetSharedFrameworkMsi))]
         [BuildPlatforms(BuildPlatform.Windows)]
         public static BuildTargetResult GenerateMsis(BuildTargetContext c)
         {
@@ -105,7 +101,7 @@ namespace Microsoft.DotNet.Cli.Build
         }
 
         [Target(nameof(MsiTargets.InitMsi),
-        nameof(GenerateCliSdkBundle))]
+        nameof(GenerateSharedFxBundle))]
         [BuildPlatforms(BuildPlatform.Windows)]
         public static BuildTargetResult GenerateBundles(BuildTargetContext c)
         {
@@ -114,31 +110,67 @@ namespace Microsoft.DotNet.Cli.Build
 
         [Target]
         [BuildPlatforms(BuildPlatform.Windows)]
-        public static BuildTargetResult GenerateCliSdkMsi(BuildTargetContext c)
+        public static BuildTargetResult GenerateDotnetSharedHostMsi(BuildTargetContext c)
         {
-            var cliSdkRoot = c.BuildContext.Get<string>("CLISDKRoot");
-            var upgradeCode = Utils.GenerateGuidFromName(SdkMsi).ToString().ToUpper();
-            var cliSdkBrandName = $"'{Monikers.CLISdkBrandName}'";
+            var hostVersion = c.BuildContext.Get<HostVersion>("HostVersion");
+            var hostMsiVersion = hostVersion.GenerateMsiVersion();            
+            var hostNugetVersion = hostVersion.LockedHostVersion;
+            var inputDir = c.BuildContext.Get<string>("SharedHostPublishRoot");
+            var wixObjRoot = Path.Combine(Dirs.Output, "obj", "wix", "sharedhost");
+            var sharedHostBrandName = $"'{Monikers.SharedHostBrandName}'";
+
+            if (Directory.Exists(wixObjRoot))
+            {
+                Utils.DeleteDirectory(wixObjRoot);
+            }
+            Directory.CreateDirectory(wixObjRoot);
 
             Cmd("powershell", "-NoProfile", "-NoLogo",
-                Path.Combine(Dirs.RepoRoot, "packaging", "windows", "clisdk", "generatemsi.ps1"),
-                cliSdkRoot, SdkMsi, WixRoot, cliSdkBrandName, MsiVersion, CliDisplayVersion, CliNugetVersion, upgradeCode, Arch)
+                Path.Combine(Dirs.RepoRoot, "packaging", "windows", "host", "generatemsi.ps1"),
+                inputDir, SharedHostMsi, WixRoot, sharedHostBrandName, hostMsiVersion, hostNugetVersion, Arch, wixObjRoot)
                     .Execute()
                     .EnsureSuccessful();
             return c.Success();
         }
 
-        [Target(nameof(MsiTargets.InitMsi))]
+        [Target]
         [BuildPlatforms(BuildPlatform.Windows)]
-        public static BuildTargetResult GenerateCliSdkBundle(BuildTargetContext c)
+        public static BuildTargetResult GenerateDotnetSharedFrameworkMsi(BuildTargetContext c)
         {
-            var upgradeCode = Utils.GenerateGuidFromName(SdkBundle).ToString().ToUpper();
-            var cliSdkBrandName = $"'{Monikers.CLISdkBrandName}'";
+            var inputDir = c.BuildContext.Get<string>("SharedFrameworkPublishRoot");
+            var sharedFrameworkNuGetName = Monikers.SharedFrameworkName;
+            var sharedFrameworkNuGetVersion = c.BuildContext.Get<string>("SharedFrameworkNugetVersion");
+            var msiVerison = sharedFrameworkNuGetVersion.Split('-')[0];
+            var upgradeCode = Utils.GenerateGuidFromName(SharedFrameworkMsi).ToString().ToUpper();
+            var wixObjRoot = Path.Combine(Dirs.Output, "obj", "wix", "sharedframework");
+            var sharedFxBrandName = $"'{Monikers.SharedFxBrandName}'";
+
+            if (Directory.Exists(wixObjRoot))
+            {
+                Utils.DeleteDirectory(wixObjRoot);
+            }
+            Directory.CreateDirectory(wixObjRoot);
 
             Cmd("powershell", "-NoProfile", "-NoLogo",
-                Path.Combine(Dirs.RepoRoot, "packaging", "windows", "clisdk", "generatebundle.ps1"),
-                SdkMsi, SharedFrameworkMsi, SharedHostMsi, SdkBundle, WixRoot, cliSdkBrandName, MsiVersion, CliDisplayVersion, CliNugetVersion, upgradeCode, Arch)
-                    .EnvironmentVariable("Stage2Dir", Dirs.Stage2)
+                Path.Combine(Dirs.RepoRoot, "packaging", "windows", "sharedframework", "generatemsi.ps1"),
+                inputDir, SharedFrameworkMsi, WixRoot, sharedFxBrandName, msiVerison, sharedFrameworkNuGetName, sharedFrameworkNuGetVersion, upgradeCode, Arch, wixObjRoot)
+                    .Execute()
+                    .EnsureSuccessful();
+            return c.Success();
+        }
+        
+        [Target(nameof(MsiTargets.InitMsi))]
+        [BuildPlatforms(BuildPlatform.Windows)]
+        public static BuildTargetResult GenerateSharedFxBundle(BuildTargetContext c)
+        {
+            var sharedFrameworkNuGetName = Monikers.SharedFrameworkName;
+            var sharedFrameworkNuGetVersion = c.BuildContext.Get<string>("SharedFrameworkNugetVersion");
+            var upgradeCode = Utils.GenerateGuidFromName(SharedFrameworkBundle).ToString().ToUpper();
+            var sharedFxBrandName = $"'{Monikers.SharedFxBrandName}'";
+
+            Cmd("powershell", "-NoProfile", "-NoLogo",
+                Path.Combine(Dirs.RepoRoot, "packaging", "windows", "sharedframework", "generatebundle.ps1"),
+                SharedFrameworkMsi, SharedHostMsi, SharedFrameworkBundle, WixRoot, sharedFxBrandName, MsiVersion, CliDisplayVersion, sharedFrameworkNuGetName, sharedFrameworkNuGetVersion, upgradeCode, Arch)
                     .Execute()
                     .EnsureSuccessful();
             return c.Success();
