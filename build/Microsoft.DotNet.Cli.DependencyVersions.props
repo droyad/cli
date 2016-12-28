@@ -5,5 +5,6 @@
     <CLI_NETSDK_Version>1.0.0-alpha-20161221-2</CLI_NETSDK_Version>
     <CLI_WEBSDK_Version>1.0.0-alpha-20161205-1-154</CLI_WEBSDK_Version>
     <CLI_TestPlatform_Version>15.0.0-preview-20161227-02</CLI_TestPlatform_Version>
+    <TemplateEngineVersion>1.0.0-beta1-20161227-63</TemplateEngineVersion>
   </PropertyGroup>
 </Project>
