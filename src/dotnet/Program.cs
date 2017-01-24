@@ -11,6 +11,7 @@ using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.DotNet.Tools.Add;
 using Microsoft.DotNet.Tools.Build;
 using Microsoft.DotNet.Tools.Clean;
+using Microsoft.DotNet.Tools.Get;
 using Microsoft.DotNet.Tools.Help;
 using Microsoft.DotNet.Tools.List;
 using Microsoft.DotNet.Tools.Migrate;
@@ -42,6 +43,7 @@ namespace Microsoft.DotNet.Cli
             ["list"] = ListCommand.Run,
             ["migrate"] = MigrateCommand.Run,
             ["msbuild"] = MSBuildCommand.Run,
+            ["get"] = GetCommand.Run,
             ["new"] = NewCommand.Run,
             ["new3"] = New3CommandShim.Run,
             ["nuget"] = NuGetCommand.Run,

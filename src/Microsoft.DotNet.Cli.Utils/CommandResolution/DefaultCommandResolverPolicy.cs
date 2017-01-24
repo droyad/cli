@@ -14,6 +14,7 @@ namespace Microsoft.DotNet.Cli.Utils
             var environment = new EnvironmentProvider();
             var packagedCommandSpecFactory = new PackagedCommandSpecFactoryWithCliRuntime();
             var publishedPathCommandSpecFactory = new PublishPathCommandSpecFactory();
+            var globalToolCommandSpecFactory = new PublishPathCommandSpecFactory();
 
             var platformCommandSpecFactory = default(IPlatformCommandSpecFactory);
             if (RuntimeEnvironment.OperatingSystemPlatform == Platform.Windows)
@@ -51,6 +52,8 @@ namespace Microsoft.DotNet.Cli.Utils
                 new PathCommandResolver(environment, platformCommandSpecFactory));
             compositeCommandResolver.AddCommandResolver(
                 new PublishedPathCommandResolver(environment, publishedPathCommandSpecFactory));
+            compositeCommandResolver.AddCommandResolver(
+                new GlobalToolCommandResolver(environment, platformCommandSpecFactory));
 
             return compositeCommandResolver;
         }
